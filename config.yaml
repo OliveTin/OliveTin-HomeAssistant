@@ -9,3 +9,9 @@ arch:
   - aarch64
   - amd64
   - i386
+ports:
+  8000/tcp: 8000
+options:
+  server: "http://myserver:1337/api/"
+schema:
+  server: str

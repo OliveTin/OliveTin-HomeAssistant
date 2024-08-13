@@ -1,14 +1,11 @@
 name: OliveTin
-version: "1"
+version: "1.0.0"
 slug: olivetin
 description: A home assistant OliveTin integration
+init: false
 arch:
   - armhf
   - armv7
   - aarch64
   - amd64
   - i386
-startup: application
-boot: auto
-options: {}
-schema: {}

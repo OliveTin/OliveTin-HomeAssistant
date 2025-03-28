@@ -11,4 +11,6 @@ OliveTin gives **safe** and **simple** access to predefined shell commands from 
 
 The native HomeAssistant plugin for OliveTin.
 
-This repository is currently the in-development work on a HomeAssistant plugin, it is not yet functional. In the mean time, check out https://docs.olivetin.app/hass.html , for instructions on how to integrate simply using the REST plugin in Home Assistant.
+This repository is currently the in-development work on a HomeAssistant plugin, it is not yet functional. In the mean time, check out https://docs.olivetin.app/integrations/homeassistant-integration.html , for instructions on how to integrate simply using the REST plugin in Home Assistant.
+
+To learn more about OliveTin, check out the website at https://olivetin.app

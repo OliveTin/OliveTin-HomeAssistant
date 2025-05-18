@@ -5,10 +5,12 @@
     "@jamesread"
   ],
   "config_flow": true,
+  "after_dependencies": ["http"],
   "documentation": "https://docs.olivetin.app/integrations/homeassistant.html",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/OliveTin/OliveTin-HomeAssistant/issues",
   "requirements": [],
+  "dependencies": [],
   "version": "1.0.0"
 }

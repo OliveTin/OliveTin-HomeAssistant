@@ -1,5 +1,9 @@
 {
   "name": "OliveTin",
+  "description": "Safely and securely run predefined shell commands",
+  "topics": [
+    "olivetin"
+  ],
   "content_in_root": false,
   "filename": "olivetin.js"
 }

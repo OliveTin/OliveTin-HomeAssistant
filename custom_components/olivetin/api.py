@@ -6,9 +6,9 @@ import logging
 from typing import Any
 from urllib.parse import urlparse
 
-from aiohttp import ClientError, ClientResponseError, ClientSession
+from aiohttp import ClientError, ClientResponseError, ClientSession, ClientTimeout
 
-from .const import API_SERVICE_PREFIX, DEFAULT_PORT
+from .const import API_SERVICE_PREFIX, DEFAULT_PORT, START_ACTION_WAIT_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,13 +88,20 @@ class OliveTinApiClient:
         return headers
 
     async def _request(
-        self, method: str, payload: dict[str, Any] | None = None
+        self,
+        method: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        timeout: ClientTimeout | None = None,
     ) -> dict[str, Any]:
         """POST a Connect RPC method and return the JSON body."""
         url = self._url(method)
         try:
             async with self._session.post(
-                url, json=payload or {}, headers=self._headers()
+                url,
+                json=payload or {},
+                headers=self._headers(),
+                timeout=timeout,
             ) as response:
                 if response.status in (401, 403):
                     raise OliveTinAuthError("Authentication failed")
@@ -160,25 +167,69 @@ class OliveTinApiClient:
         self,
         binding_id: str,
         arguments: list[dict[str, str]] | None = None,
-    ) -> str:
-        """Start an action by binding ID; return execution tracking ID."""
-        data = await self._request(
-            "StartAction",
-            {
-                "bindingId": binding_id,
-                "arguments": arguments or [],
-            },
-        )
+        justification: str | None = None,
+    ) -> dict[str, Any]:
+        """Start an action without waiting; return tracking metadata."""
+        payload: dict[str, Any] = {
+            "bindingId": binding_id,
+            "arguments": arguments or [],
+        }
+        if justification:
+            payload["justification"] = justification
+
+        data = await self._request("StartAction", payload)
         tracking_id = data.get("executionTrackingId") or data.get(
             "execution_tracking_id", ""
         )
         _LOGGER.debug(
             "Started OliveTin action %s (tracking_id=%s)", binding_id, tracking_id
         )
-        return tracking_id
+        return {
+            "binding_id": binding_id,
+            "execution_tracking_id": tracking_id,
+            "waited": False,
+        }
 
-    async def async_get_actions(self) -> list[dict[str, Any]]:
-        """Return executable, argument-free actions from all root dashboards."""
+    async def async_start_action_and_wait(
+        self,
+        binding_id: str,
+        arguments: list[dict[str, str]] | None = None,
+        justification: str | None = None,
+    ) -> dict[str, Any]:
+        """Start an action, wait for completion, return normalized log entry."""
+        payload: dict[str, Any] = {
+            # StartActionAndWait uses actionId; OliveTin resolves it like binding IDs.
+            "actionId": binding_id,
+            "arguments": arguments or [],
+        }
+        if justification:
+            payload["justification"] = justification
+
+        data = await self._request(
+            "StartActionAndWait",
+            payload,
+            timeout=ClientTimeout(total=START_ACTION_WAIT_TIMEOUT),
+        )
+        log_entry = data.get("logEntry") or data.get("log_entry") or {}
+        if not isinstance(log_entry, dict):
+            raise OliveTinConnectionError("OliveTin returned an invalid log entry")
+
+        result = normalize_log_entry(log_entry)
+        result["waited"] = True
+        if not result.get("binding_id"):
+            result["binding_id"] = binding_id
+        _LOGGER.debug(
+            "Finished OliveTin action %s (tracking_id=%s, exit_code=%s)",
+            binding_id,
+            result.get("execution_tracking_id"),
+            result.get("exit_code"),
+        )
+        return result
+
+    async def async_get_actions(
+        self, *, argument_free_only: bool = False
+    ) -> list[dict[str, Any]]:
+        """Return executable actions from all root dashboards."""
         init = await self.async_init()
         titles = list(init.get("rootDashboards") or init.get("root_dashboards") or [])
         # Empty title resolves to OliveTin's default/actions dashboard.
@@ -209,11 +260,10 @@ class OliveTinApiClient:
             can_exec = action.get("canExec", action.get("can_exec", True))
             if not can_exec:
                 continue
-            arguments = action.get("arguments") or []
-            if arguments:
-                # Buttons cannot collect arguments; skip parameterized actions.
+            if argument_free_only and action_arguments(action):
                 _LOGGER.debug(
-                    "Skipping OliveTin action %s (requires arguments)", binding_id
+                    "Skipping OliveTin action %s for buttons (requires arguments)",
+                    binding_id,
                 )
                 continue
             seen.add(binding_id)
@@ -236,3 +286,161 @@ def _collect_actions(components: list[Any]) -> list[dict[str, Any]]:
         if nested:
             actions.extend(_collect_actions(nested))
     return actions
+
+
+def action_binding_id(action: dict[str, Any]) -> str:
+    """Return the binding ID for an action dict."""
+    return str(action.get("bindingId") or action.get("binding_id") or "")
+
+
+def action_arguments(action: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return argument definitions for an action."""
+    arguments = action.get("arguments") or []
+    return [arg for arg in arguments if isinstance(arg, dict) and arg.get("name")]
+
+
+def serialize_action_for_ha(action: dict[str, Any]) -> dict[str, Any]:
+    """Serialize an OliveTin action definition for HA service responses."""
+    arguments = []
+    for arg in action_arguments(action):
+        choices = arg.get("choices") or []
+        arguments.append(
+            {
+                "name": arg.get("name", ""),
+                "title": arg.get("title") or arg.get("name", ""),
+                "type": arg.get("type") or "",
+                "description": arg.get("description") or "",
+                "default": arg.get("defaultValue", arg.get("default_value", "")) or "",
+                "choices": [
+                    {
+                        "value": choice.get("value", ""),
+                        "title": choice.get("title") or choice.get("value", ""),
+                    }
+                    for choice in choices
+                    if isinstance(choice, dict)
+                ],
+            }
+        )
+    return {
+        "binding_id": action_binding_id(action),
+        "title": action.get("title") or action_binding_id(action),
+        "can_exec": bool(action.get("canExec", action.get("can_exec", True))),
+        "arguments": arguments,
+    }
+
+
+def coerce_arguments(
+    raw: list[dict[str, Any]] | dict[str, Any] | None,
+) -> list[dict[str, str]]:
+    """Normalize HA service arguments to OliveTin [{name, value}] objects.
+
+    Accepts either:
+    - mapping: {"container": "jellyfin", "version": "latest"}
+    - list: [{"name": "container", "value": "jellyfin"}, ...]
+    """
+    if raw is None:
+        return []
+
+    if isinstance(raw, dict):
+        return [{"name": str(key), "value": str(value)} for key, value in raw.items()]
+
+    if isinstance(raw, list):
+        result: list[dict[str, str]] = []
+        for item in raw:
+            if not isinstance(item, dict) or "name" not in item or "value" not in item:
+                raise ValueError(
+                    "List arguments must be objects with name and value keys"
+                )
+            result.append({"name": str(item["name"]), "value": str(item["value"])})
+        return result
+
+    raise ValueError("arguments must be a mapping or a list of {name, value} objects")
+
+
+def resolve_action_arguments(
+    action: dict[str, Any] | None,
+    provided: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Merge provided arguments with action defaults; reject unknown names."""
+    provided_map = {item["name"]: item["value"] for item in provided}
+
+    if action is None:
+        return [{"name": name, "value": value} for name, value in provided_map.items()]
+
+    defined = action_arguments(action)
+    defined_names = {str(arg["name"]) for arg in defined}
+    unknown = sorted(name for name in provided_map if name not in defined_names)
+    if unknown:
+        raise ValueError(
+            "Unknown argument(s) for action "
+            f"{action_binding_id(action)}: {', '.join(unknown)}"
+        )
+
+    resolved: list[dict[str, str]] = []
+    for arg in defined:
+        name = str(arg["name"])
+        if name in provided_map:
+            value = provided_map[name]
+        else:
+            value = str(arg.get("defaultValue", arg.get("default_value", "")) or "")
+        resolved.append({"name": name, "value": value})
+    return resolved
+
+
+def normalize_log_entry(log_entry: dict[str, Any]) -> dict[str, Any]:
+    """Normalize an OliveTin LogEntry into HA-friendly snake_case fields."""
+
+    def _get(*keys: str, default: Any = None) -> Any:
+        for key in keys:
+            if key in log_entry:
+                return log_entry[key]
+        return default
+
+    arguments = _get("arguments", default=[]) or []
+    normalized_arguments = [
+        {
+            "name": arg.get("name", ""),
+            "value": arg.get("value", ""),
+        }
+        for arg in arguments
+        if isinstance(arg, dict)
+    ]
+
+    exit_code = _get("exitCode", "exit_code")
+    if exit_code is not None:
+        try:
+            exit_code = int(exit_code)
+        except (TypeError, ValueError):
+            pass
+
+    return {
+        "binding_id": _get("bindingId", "binding_id", default="") or "",
+        "action_title": _get("actionTitle", "action_title", default="") or "",
+        "output": _get("output", default="") or "",
+        "exit_code": exit_code,
+        "timed_out": bool(_get("timedOut", "timed_out", default=False)),
+        "blocked": bool(_get("blocked", default=False)),
+        "queued": bool(_get("queued", default=False)),
+        "execution_started": bool(
+            _get("executionStarted", "execution_started", default=False)
+        ),
+        "execution_finished": bool(
+            _get("executionFinished", "execution_finished", default=False)
+        ),
+        "execution_tracking_id": _get(
+            "executionTrackingId", "execution_tracking_id", default=""
+        )
+        or "",
+        "datetime_started": _get("datetimeStarted", "datetime_started", default="")
+        or "",
+        "datetime_finished": _get("datetimeFinished", "datetime_finished", default="")
+        or "",
+        "user": _get("user", default="") or "",
+        "justification": _get("justification", default="") or "",
+        "arguments": normalized_arguments,
+        "success": (
+            exit_code == 0
+            and not bool(_get("timedOut", "timed_out", default=False))
+            and not bool(_get("blocked", default=False))
+        ),
+    }

@@ -1,0 +1,10 @@
+{
+  "services": {
+    "start_action": {
+      "service": "mdi:play-circle-outline"
+    },
+    "list_actions": {
+      "service": "mdi:format-list-bulleted"
+    }
+  }
+}

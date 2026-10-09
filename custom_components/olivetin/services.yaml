@@ -1,0 +1,41 @@
+start_action:
+  fields:
+    binding_id:
+      required: true
+      example: container_upgrade
+      selector:
+        text:
+    wait:
+      default: true
+      example: true
+      selector:
+        boolean:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: olivetin
+    justification:
+      required: false
+      selector:
+        text:
+    arguments:
+      required: false
+      example:
+        container: jellyfin
+        version: latest
+      selector:
+        object:
+
+list_actions:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: olivetin
+    refresh:
+      default: false
+      example: false
+      selector:
+        boolean:

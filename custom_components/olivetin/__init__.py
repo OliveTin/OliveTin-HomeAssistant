@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.typing import ConfigType
 
-from .api import OliveTinApiClient, OliveTinAuthError, OliveTinConnectionError
+from .api import (
+    OliveTinApiClient,
+    OliveTinAuthError,
+    OliveTinConnectionError,
+    action_binding_id,
+)
 from .const import PLATFORMS
+from .services import async_setup_services
 
 type OliveTinConfigEntry = ConfigEntry[OliveTinData]
 
@@ -22,6 +30,13 @@ class OliveTinData:
 
     client: OliveTinApiClient
     version: str | None = None
+    actions: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the OliveTin integration (registers domain services)."""
+    await async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: OliveTinConfigEntry) -> bool:
@@ -37,13 +52,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: OliveTinConfigEntry) -> 
 
     try:
         init = await client.async_authenticate()
+        actions = await client.async_get_actions()
     except OliveTinAuthError as err:
         raise ConfigEntryAuthFailed(str(err)) from err
     except OliveTinConnectionError as err:
         raise ConfigEntryNotReady(str(err)) from err
 
     version = init.get("currentVersion") or init.get("current_version")
-    entry.runtime_data = OliveTinData(client=client, version=version)
+    entry.runtime_data = OliveTinData(
+        client=client,
+        version=version,
+        actions={action_binding_id(action): action for action in actions},
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

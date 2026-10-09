@@ -25,5 +25,47 @@
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
     }
+  },
+  "services": {
+    "start_action": {
+      "name": "Start action",
+      "description": "Start an OliveTin action and optionally wait for the log entry result.",
+      "fields": {
+        "binding_id": {
+          "name": "Binding ID",
+          "description": "OliveTin action binding ID to start."
+        },
+        "wait": {
+          "name": "Wait for completion",
+          "description": "Wait for the action to finish and include log entry fields in the response."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "OliveTin config entry to use when more than one is configured."
+        },
+        "justification": {
+          "name": "Justification",
+          "description": "Optional justification text when required by the OliveTin action."
+        },
+        "arguments": {
+          "name": "Arguments",
+          "description": "Action arguments as a mapping (name: value) or a list of {name, value} objects. Missing values use OliveTin defaults when known."
+        }
+      }
+    },
+    "list_actions": {
+      "name": "List actions",
+      "description": "List OliveTin actions and their argument schemas.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "OliveTin config entry to use when more than one is configured."
+        },
+        "refresh": {
+          "name": "Refresh",
+          "description": "Fetch a fresh action catalog from OliveTin before returning."
+        }
+      }
+    }
   }
 }

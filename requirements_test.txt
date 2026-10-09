@@ -1,3 +1,4 @@
 pytest>=8.0
+aiohttp>=3.9
 protobuf>=4.25,<7
 grpcio-tools>=1.62

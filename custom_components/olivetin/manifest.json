@@ -1,16 +1,13 @@
 {
   "domain": "olivetin",
   "name": "OliveTin",
-  "after_dependencies": ["http"],
-  "codeowners": [
-    "@jamesread"
-  ],
+  "codeowners": ["@jamesread"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://docs.olivetin.app/integrations/homeassistant.html",
+  "documentation": "https://docs.olivetin.app/integrations/homeassistant-integration.html",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/OliveTin/OliveTin-HomeAssistant/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "1.1.0"
 }

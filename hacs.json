@@ -1,5 +1,5 @@
 {
   "name": "OliveTin",
   "content_in_root": false,
-  "filename": "olivetin.js"
+  "render_readme": true
 }

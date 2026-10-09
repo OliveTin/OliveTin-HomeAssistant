@@ -2,17 +2,24 @@
   "config": {
     "step": {
       "user": {
-		"title": "API Access",
+        "title": "Connect to OliveTin",
+        "description": "Enter the OliveTin API URL. Leave username empty and put an API key in the password field to use bearer authentication.",
         "data": {
           "host": "[%key:common::config_flow::data::host%]",
           "username": "[%key:common::config_flow::data::username%]",
           "password": "[%key:common::config_flow::data::password%]"
+        },
+        "data_description": {
+          "host": "OliveTin API base URL, for example http://olivetin.local:1337/api",
+          "username": "Local OliveTin username, or leave empty when using an API key",
+          "password": "Local OliveTin password, or API key when username is empty"
         }
       }
     },
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "invalid_host": "Invalid OliveTin host or URL",
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {

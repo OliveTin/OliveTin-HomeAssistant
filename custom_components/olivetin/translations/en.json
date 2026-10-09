@@ -1,21 +1,29 @@
 {
-    "config": {
-        "abort": {
-            "already_configured": "Device is already configured"
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to OliveTin",
+        "description": "Enter the OliveTin API URL. Leave username empty and put an API key in the password field to use bearer authentication.",
+        "data": {
+          "host": "Host",
+          "username": "Username",
+          "password": "Password"
         },
-        "error": {
-            "cannot_connect": "Failed to connect",
-            "invalid_auth": "Invalid authentication",
-            "unknown": "Unexpected error"
-        },
-        "step": {
-            "user": {
-                "data": {
-                    "host": "Host",
-                    "password": "Password",
-                    "username": "Username"
-                }
-            }
+        "data_description": {
+          "host": "OliveTin API base URL, for example http://olivetin.local:1337/api",
+          "username": "Local OliveTin username, or leave empty when using an API key",
+          "password": "Local OliveTin password, or API key when username is empty"
         }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "invalid_host": "Invalid OliveTin host or URL",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
     }
+  }
 }

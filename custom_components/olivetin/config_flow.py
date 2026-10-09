@@ -10,67 +10,61 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
+from .api import (
+    OliveTinApiClient,
+    OliveTinAuthError,
+    OliveTinConnectionError,
+    normalize_host,
+)
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# TODO adjust the data schema to the data that you need
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_HOST): str,
-        vol.Required(CONF_USERNAME): str,
-        vol.Required(CONF_PASSWORD): str,
+        vol.Required(CONF_HOST): TextSelector(),
+        vol.Optional(CONF_USERNAME, default=""): TextSelector(),
+        vol.Optional(CONF_PASSWORD, default=""): TextSelector(
+            TextSelectorConfig(type=TextSelectorType.PASSWORD)
+        ),
     }
 )
 
 
-class PlaceholderHub:
-    """Placeholder class to make tests pass.
-
-    TODO Remove this placeholder class and replace with things from your PyPI package.
-    """
-
-    def __init__(self, host: str) -> None:
-        """Initialize."""
-        self.host = host
-
-    async def authenticate(self, username: str, password: str) -> bool:
-        """Test if we can authenticate with the host."""
-        return True
-
-
-async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
     """Validate the user input allows us to connect.
 
-    Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
+    Returns info used for the config entry title and normalized host.
     """
-    # TODO validate the data can be used to set up a connection.
+    host = normalize_host(data[CONF_HOST])
+    session = async_create_clientsession(hass)
+    client = OliveTinApiClient(
+        session,
+        host,
+        data.get(CONF_USERNAME),
+        data.get(CONF_PASSWORD),
+    )
 
-    # If your PyPI package is not built with async, pass your methods
-    # to the executor:
-    # await hass.async_add_executor_job(
-    #     your_validate_func, data[CONF_USERNAME], data[CONF_PASSWORD]
-    # )
+    init = await client.async_authenticate()
+    # Confirm dashboard access (auth may succeed while ACLs still block).
+    await client.async_get_dashboard("")
 
-    hub = PlaceholderHub(data[CONF_HOST])
+    title = init.get("pageTitle") or init.get("page_title") or "OliveTin"
+    version = init.get("currentVersion") or init.get("current_version")
+    if version:
+        title = f"{title} ({version})"
 
-    if not await hub.authenticate(data[CONF_USERNAME], data[CONF_PASSWORD]):
-        raise InvalidAuth
-
-    # If you cannot connect:
-    # throw CannotConnect
-    # If the authentication is wrong:
-    # InvalidAuth
-
-    # Return info that you want to store in the config entry.
-    return {
-        "title": f"OliveTin Server {data[CONF_HOST]}",
-    }, hub
+    return {"title": title, "host": host}
 
 
-class ConfigFlow(ConfigFlow, domain=DOMAIN):
+class OliveTinConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OliveTin."""
 
     VERSION = 1
@@ -82,28 +76,29 @@ class ConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                info, hub = await validate_input(self.hass, user_input)
-            except CannotConnect:
+                info = await validate_input(self.hass, user_input)
+            except ValueError:
+                errors["base"] = "invalid_host"
+            except OliveTinConnectionError:
                 errors["base"] = "cannot_connect"
-            except InvalidAuth:
+            except OliveTinAuthError:
                 errors["base"] = "invalid_auth"
             except Exception:
-                _LOGGER.exception("Unexpected exception")
+                _LOGGER.exception("Unexpected exception while configuring OliveTin")
                 errors["base"] = "unknown"
             else:
-                return self.async_create_entry(
-                    title=info["title"],
-                    data=user_input
-                )
+                await self.async_set_unique_id(info["host"])
+                self._abort_if_unique_id_configured()
+
+                data = {
+                    CONF_HOST: info["host"],
+                    CONF_USERNAME: user_input.get(CONF_USERNAME, ""),
+                    CONF_PASSWORD: user_input.get(CONF_PASSWORD, ""),
+                }
+                return self.async_create_entry(title=info["title"], data=data)
 
         return self.async_show_form(
-            step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
+            step_id="user",
+            data_schema=STEP_USER_DATA_SCHEMA,
+            errors=errors,
         )
-
-
-class CannotConnect(HomeAssistantError):
-    """Error to indicate we cannot connect."""
-
-
-class InvalidAuth(HomeAssistantError):
-    """Error to indicate there is invalid auth."""

@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "OliveTin_HomeAssistant",
+  "project_id": "90317aee-fba5-4ac5-965b-d5d1dd075638"
+}
